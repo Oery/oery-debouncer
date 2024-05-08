@@ -1,5 +1,10 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::HashMap,
+    sync::{mpsc, Mutex},
+    thread,
+};
 
+use tray_item::{IconSource, TrayItem};
 use windows::{
     core::*,
     Win32::{Foundation::*, System::LibraryLoader::GetModuleHandleA, UI::WindowsAndMessaging::*},
@@ -32,7 +37,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
     CallNextHookEx(None, code, wparam, lparam)
 }
 
-fn main() -> Result<()> {
+fn set_keyboard_hook() -> Result<()> {
     unsafe {
         let instance = GetModuleHandleA(None)?;
         let hook = SetWindowsHookExA(WH_KEYBOARD_LL, Some(keyboard_hook_proc), instance, 0);
@@ -47,4 +52,34 @@ fn main() -> Result<()> {
         let _ = UnhookWindowsHookEx(hook.unwrap());
     }
     Ok(())
+}
+
+enum Message {
+    Quit,
+}
+
+fn main() {
+    let mut tray = TrayItem::new("Oery Debouncer", IconSource::Resource("icon")).unwrap();
+    tray.add_label("Oery Debouncer").unwrap();
+
+    let (tx, rx) = mpsc::sync_channel(1);
+
+    let quit_tx = tx.clone();
+    tray.add_menu_item("Quit", move || {
+        quit_tx.send(Message::Quit).unwrap();
+    })
+    .unwrap();
+
+    thread::spawn(move || {
+        set_keyboard_hook().unwrap();
+    });
+
+    loop {
+        match rx.recv() {
+            Ok(Message::Quit) => {
+                break;
+            }
+            Err(_) => todo!(),
+        }
+    }
 }
