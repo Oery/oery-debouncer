@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 mod config;
 
 use std::{
