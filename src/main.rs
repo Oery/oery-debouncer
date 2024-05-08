@@ -16,7 +16,7 @@ lazy_static! {
     static ref LAST_KEY_PRESSES: Mutex<HashMap<u32, u32>> = Mutex::new(HashMap::new());
 }
 
-const DEBOUNCE_TIME: u32 = 70;
+static mut DEBOUNCE_TIME: u32 = 70;
 
 unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 {
@@ -54,6 +54,37 @@ fn set_keyboard_hook() -> Result<()> {
     Ok(())
 }
 
+fn loword(value: u32) -> u16 {
+    (value & 0xffff) as u16
+}
+
+unsafe extern "system" fn dialog_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    _lparam: LPARAM,
+) -> isize {
+    match msg {
+        WM_INITDIALOG => {
+            SetDlgItemInt(hwnd, 1001, DEBOUNCE_TIME, BOOL(0)).unwrap();
+            TRUE.0 as isize
+        }
+        WM_COMMAND => {
+            if loword(wparam.0 as u32) == IDOK.0 as u16 {
+                // Update DEBOUNCE_TIME from text box when OK is clicked
+                let mut success = BOOL(0);
+                let new_time = GetDlgItemInt(hwnd, 1001, Some(&mut success), BOOL(0));
+                if success.as_bool() {
+                    DEBOUNCE_TIME = new_time;
+                }
+                EndDialog(hwnd, 0).unwrap();
+            }
+            0
+        }
+        _ => 0,
+    }
+}
+
 enum Message {
     Quit,
 }
@@ -63,6 +94,13 @@ fn main() {
     tray.add_label("Oery Debouncer").unwrap();
 
     let (tx, rx) = mpsc::sync_channel(1);
+
+    tray.add_menu_item("Change Debounce Time", move || unsafe {
+        let instance = GetModuleHandleA(None).unwrap();
+        let template_name = PSTR(b"DEBOUNCE_TIME_DIALOG\0".as_ptr() as _);
+        DialogBoxParamA(instance, template_name, None, Some(dialog_proc), LPARAM(0));
+    })
+    .unwrap();
 
     let quit_tx = tx.clone();
     tray.add_menu_item("Quit", move || {

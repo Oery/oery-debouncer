@@ -1,0 +1,9 @@
+#include <windows.h>
+DEBOUNCE_TIME_DIALOG DIALOG 0, 0, 100, 80
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Change Debounce Time"
+BEGIN
+    LTEXT           "Debounce Time (ms):", -1, 10, 10, 160, 12
+    EDITTEXT        1001, 10, 25, 80, 12, ES_AUTOHSCROLL
+    PUSHBUTTON      "OK", IDOK, 20, 50, 60, 14
+END
