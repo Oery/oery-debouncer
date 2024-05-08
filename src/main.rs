@@ -17,7 +17,12 @@ use windows::{
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref LAST_KEY_PRESSES: Mutex<HashMap<u32, u32>> = Mutex::new(HashMap::new());
+    static ref KEY_DATA: Mutex<HashMap<u32, KeyState>> = Mutex::new(HashMap::new());
+}
+
+struct KeyState {
+    is_down: bool,
+    last_press_time: u32,
 }
 
 static mut DEBOUNCE_TIME: u32 = 70;
@@ -26,17 +31,39 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
     if code >= 0 {
         let kb_struct = *(lparam.0 as *const KBDLLHOOKSTRUCT);
         let vk_code = kb_struct.vkCode;
+        let current_time = kb_struct.time;
 
-        if wparam.0 == WM_KEYDOWN as usize || wparam.0 == WM_SYSKEYDOWN as usize {
-            let current_time = kb_struct.time;
-            let mut map = LAST_KEY_PRESSES.lock().unwrap();
-            if let Some(&last_press_time) = map.get(&vk_code) {
-                if current_time - last_press_time < DEBOUNCE_TIME {
-                    return LRESULT(1);
+        let mut key_data = KEY_DATA.lock().unwrap();
+
+        match wparam.0 as u32 {
+            WM_KEYDOWN | WM_SYSKEYDOWN => {
+                if let Some(key_state) = key_data.get_mut(&vk_code) {
+                    if !key_state.is_down {
+                        if current_time - key_state.last_press_time < DEBOUNCE_TIME {
+                            return LRESULT(1);
+                        }
+                        key_state.is_down = true;
+                        key_state.last_press_time = current_time;
+                    }
+                } else {
+                    // First time this key is pressed
+                    key_data.insert(
+                        vk_code,
+                        KeyState {
+                            is_down: true,
+                            last_press_time: current_time,
+                        },
+                    );
                 }
             }
-            map.insert(vk_code, current_time);
-        }
+            WM_KEYUP | WM_SYSKEYUP => {
+                if let Some(key_state) = key_data.get_mut(&vk_code) {
+                    key_state.is_down = false;
+                    key_state.last_press_time = current_time; // Update last press time on key up
+                }
+            }
+            _ => {}
+        };
     }
     CallNextHookEx(None, code, wparam, lparam)
 }
