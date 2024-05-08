@@ -1,9 +1,12 @@
+mod config;
+
 use std::{
     collections::HashMap,
     sync::{mpsc, Mutex},
     thread,
 };
 
+use config::{load_config, save_config, Config};
 use tray_item::{IconSource, TrayItem};
 use windows::{
     core::*,
@@ -76,6 +79,9 @@ unsafe extern "system" fn dialog_proc(
                 let new_time = GetDlgItemInt(hwnd, 1001, Some(&mut success), BOOL(0));
                 if success.as_bool() {
                     DEBOUNCE_TIME = new_time;
+                    let _ = save_config(&Config {
+                        debounce_time: new_time,
+                    });
                 }
                 EndDialog(hwnd, 0).unwrap();
             }
@@ -107,6 +113,15 @@ fn main() {
         quit_tx.send(Message::Quit).unwrap();
     })
     .unwrap();
+
+    let config = match load_config() {
+        Ok(config) => config,
+        Err(_) => Config { debounce_time: 70 },
+    };
+
+    unsafe {
+        DEBOUNCE_TIME = config.debounce_time;
+    }
 
     thread::spawn(move || {
         set_keyboard_hook().unwrap();
