@@ -12,7 +12,6 @@ This utility adds a debounce time to your keyboard, this can fix keys with doubl
 ### Known issues
 
 -   The FN modifier key isn't debounced (Windows API limitation)
--   Hold for repeat is slowed down due to keys being filtered (could probably be fixed)
 
 ## Building
 
