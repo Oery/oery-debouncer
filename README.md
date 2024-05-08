@@ -4,7 +4,7 @@ This utility adds a debounce time to your keyboard, this can fix keys with doubl
 
 ## Usage
 
-1.  Download the latest release from the [releases page](https://github.com/oeyoews/oery-debouncer/releases)
+1.  Download the latest release from the [releases page](https://github.com/oery/oery-debouncer/releases)
 2.  Execute the executable
 3.  Set the debounce time in the system tray icon
 4.  Add a link to the executable in your `shell:startup` folder if you want it to start on boot
