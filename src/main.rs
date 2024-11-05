@@ -40,6 +40,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
                 if let Some(key_state) = key_data.get_mut(&vk_code) {
                     if !key_state.is_down {
                         if current_time - key_state.last_press_time < DEBOUNCE_TIME {
+                            key_state.is_down = true;
                             return LRESULT(1);
                         }
                         key_state.is_down = true;
@@ -59,7 +60,6 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
             WM_KEYUP | WM_SYSKEYUP => {
                 if let Some(key_state) = key_data.get_mut(&vk_code) {
                     key_state.is_down = false;
-                    key_state.last_press_time = current_time; // Update last press time on key up
                 }
             }
             _ => {}
