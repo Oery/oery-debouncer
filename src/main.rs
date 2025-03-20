@@ -17,49 +17,61 @@ use windows::{
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref KEY_DATA: Mutex<HashMap<u32, KeyState>> = Mutex::new(HashMap::new());
+    static ref BUTTON_DATA: Mutex<HashMap<u32, ButtonState>> = Mutex::new(HashMap::new());
 }
 
-struct KeyState {
+struct ButtonState {
     is_down: bool,
     last_press_time: u32,
 }
 
 static mut DEBOUNCE_TIME: u32 = 70;
-
-unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 {
-        let kb_struct = *(lparam.0 as *const KBDLLHOOKSTRUCT);
-        let vk_code = kb_struct.vkCode;
-        let current_time = kb_struct.time;
+        let mouse_struct = *(lparam.0 as *const MSLLHOOKSTRUCT);
+        let current_time = mouse_struct.time;
 
-        let mut key_data = KEY_DATA.lock().unwrap();
+        let mut button_data = BUTTON_DATA.lock().unwrap();
 
         match wparam.0 as u32 {
-            WM_KEYDOWN | WM_SYSKEYDOWN => {
-                if let Some(key_state) = key_data.get_mut(&vk_code) {
-                    if !key_state.is_down {
-                        if current_time - key_state.last_press_time < DEBOUNCE_TIME {
-                            return LRESULT(1);
+            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => {
+                let button = match wparam.0 as u32 {
+                    WM_LBUTTONDOWN => 0,
+                    WM_RBUTTONDOWN => 1,
+                    WM_MBUTTONDOWN => 2,
+                    _ => return CallNextHookEx(None, code, wparam, lparam),
+                };
+
+                if let Some(button_state) = button_data.get_mut(&button) {
+                    if !button_state.is_down {
+                        if current_time - button_state.last_press_time < DEBOUNCE_TIME {
+                            return LRESULT(1); // Filter out this click
                         }
-                        key_state.is_down = true;
-                        key_state.last_press_time = current_time;
+                        button_state.is_down = true;
+                        button_state.last_press_time = current_time; // Update time only for non-filtered clicks
                     }
                 } else {
-                    // First time this key is pressed
-                    key_data.insert(
-                        vk_code,
-                        KeyState {
+                    // First time this button is pressed
+                    button_data.insert(
+                        button,
+                        ButtonState {
                             is_down: true,
                             last_press_time: current_time,
                         },
                     );
                 }
             }
-            WM_KEYUP | WM_SYSKEYUP => {
-                if let Some(key_state) = key_data.get_mut(&vk_code) {
-                    key_state.is_down = false;
-                    key_state.last_press_time = current_time; // Update last press time on key up
+            WM_LBUTTONUP | WM_RBUTTONUP | WM_MBUTTONUP => {
+                let button = match wparam.0 as u32 {
+                    WM_LBUTTONUP => 0,
+                    WM_RBUTTONUP => 1,
+                    WM_MBUTTONUP => 2,
+                    _ => return CallNextHookEx(None, code, wparam, lparam),
+                };
+
+                if let Some(button_state) = button_data.get_mut(&button) {
+                    button_state.is_down = false;
+                    // We don't update last_press_time here anymore
                 }
             }
             _ => {}
@@ -68,10 +80,10 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
     CallNextHookEx(None, code, wparam, lparam)
 }
 
-fn set_keyboard_hook() -> Result<()> {
+fn set_mouse_hook() -> Result<()> {
     unsafe {
         let instance = GetModuleHandleA(None)?;
-        let hook = SetWindowsHookExA(WH_KEYBOARD_LL, Some(keyboard_hook_proc), instance, 0);
+        let hook = SetWindowsHookExA(WH_MOUSE_LL, Some(mouse_hook_proc), instance, 0);
 
         let mut msg = MSG::default();
 
@@ -124,8 +136,8 @@ enum Message {
 }
 
 fn main() {
-    let mut tray = TrayItem::new("Oery Debouncer", IconSource::Resource("icon")).unwrap();
-    tray.add_label("Oery Debouncer").unwrap();
+    let mut tray = TrayItem::new("Oery Mouse Debouncer", IconSource::Resource("icon")).unwrap();
+    tray.add_label("Oery Mouse Debouncer").unwrap();
 
     let (tx, rx) = mpsc::sync_channel(1);
 
@@ -152,7 +164,7 @@ fn main() {
     }
 
     thread::spawn(move || {
-        set_keyboard_hook().unwrap();
+        set_mouse_hook().unwrap();
     });
 
     loop {
